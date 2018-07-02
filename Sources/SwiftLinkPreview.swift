@@ -6,6 +6,8 @@
 //  Copyright © 2016 leocardz.com. All rights reserved.
 //
 import Foundation
+import Fuzi
+import os.log
 
 public enum SwiftLinkResponseKey: String {
     case url
@@ -343,37 +345,25 @@ extension SwiftLinkPreview {
 
 
     private func parseHtmlString(_ htmlString: String, response: Response, completion: @escaping (Response) -> Void) {
-        completion(self.performPageCrawling(self.cleanSource(htmlString), response: response))
+        completion(self.performPageCrawling(htmlString, response: response))
     }
-
-    // Removing unnecessary data from the source
-    private func cleanSource(_ source: String) -> String {
-
-        var source = source
-        
-        source = source.deleteTagByPattern(Regex.inlineStylePattern)
-        source = source.deleteTagByPattern(Regex.inlineScriptPattern)
-        source = source.deleteTagByPattern(Regex.scriptPattern)
-        source = source.deleteTagByPattern(Regex.commentPattern)
-
-        return source
-
-    }
-
 
     // Perform the page crawiling
     private func performPageCrawling(_ htmlCode: String, response: Response) -> Response {
-        var result = self.crawIcon(htmlCode, result: response)
-
-        let sanitizedHtmlCode = htmlCode.deleteTagByPattern(Regex.linkPattern).extendedTrim
-
-        result = self.crawlMetaTags(sanitizedHtmlCode, result: result)
-
-        var otherResponse = self.crawlTitle(sanitizedHtmlCode, result: result)
-
-        otherResponse = self.crawlDescription(otherResponse.htmlCode, result: otherResponse.result)
-
-        return self.crawlImages(otherResponse.htmlCode, result: otherResponse.result)
+        var result = response
+        //TODO: Consider as error if failed to parse?
+        if let doc = try? HTMLDocument(string: htmlCode) {
+            result = self.crawlIcon(htmlCode, result: response)
+            
+            result = self.crawlMetatags(doc: doc, response: result)
+            
+            result = self.crawlTitle(htmlCode, result: result)
+            
+            result = self.crawlDescription(htmlCode, result: result)
+            
+            result = self.crawlImages(htmlCode, result: result)
+        }
+        return result
     }
 
 
@@ -428,7 +418,7 @@ extension SwiftLinkPreview {
 extension SwiftLinkPreview {
 
     // searc for favicn
-    internal func crawIcon(_ htmlCode: String, result: Response) -> Response {
+    internal func crawlIcon(_ htmlCode: String, result: Response) -> Response {
         var result = result
 
         let metatags = Regex.pregMatchAll(htmlCode, regex: Regex.linkPattern, index: 1)
@@ -451,51 +441,48 @@ extension SwiftLinkPreview {
 
         return result
     }
-
-    // Search for meta tags
-    internal func crawlMetaTags(_ htmlCode: String, result: Response) -> Response {
-
-        var result = result
-
-        let possibleTags: [String] = [
-            SwiftLinkResponseKey.title.rawValue,
-            SwiftLinkResponseKey.description.rawValue,
-            SwiftLinkResponseKey.image.rawValue
-        ]
-
-        let metatags = Regex.pregMatchAll(htmlCode, regex: Regex.metatagPattern, index: 1)
-
+    
+    internal func crawlMetatags(doc: HTMLDocument, response: Response) -> Response {
+        var result = response
+        let metatags : NodeSet = doc.xpath("//meta")
+        if let title = crawlMetatags(metatags, for:SwiftLinkResponseKey.title.rawValue) {
+            result[.title] = title
+        }
+        if let description = crawlMetatags(metatags, for:SwiftLinkResponseKey.description.rawValue) {
+            result[.description] = description
+        }
+        if let image = crawlMetatags(metatags, for:SwiftLinkResponseKey.image.rawValue) {
+            let value = addImagePrefixIfNeeded(image, result: result)
+            if value.isImage() {
+                result[.image] = value
+            }
+        }
+        return result
+    }
+    
+    internal func crawlMetatags(_ metatags: NodeSet, for key : String) -> String? {
         for metatag in metatags {
-            for tag in possibleTags {
-                if (metatag.range(of: "property=\"og:\(tag)") != nil ||
-                    metatag.range(of: "property='og:\(tag)") != nil ||
-                    metatag.range(of: "name=\"twitter:\(tag)") != nil ||
-                    metatag.range(of: "name='twitter:\(tag)") != nil ||
-                    metatag.range(of: "name=\"\(tag)") != nil ||
-                    metatag.range(of: "name='\(tag)") != nil ||
-                    metatag.range(of: "itemprop=\"\(tag)") != nil ||
-                    metatag.range(of: "itemprop='\(tag)") != nil) {
-
-                    if let key = SwiftLinkResponseKey(rawValue: tag), result[key] == nil {
-                        if let value = Regex.pregMatchFirst(metatag, regex: Regex.metatagContentPattern, index: 2) {
-                            let value = value.decoded.extendedTrim
-                            if tag == "image" {
-                                let value = addImagePrefixIfNeeded(value, result: result)
-                                if value.isImage() { result[key] = value }
-                            } else {
-                                result[key] = value
-                            }
-                        }
-                    }
+            if let content = metatag["content"] {
+                let trimmedContent = content.extendedTrim
+                if let property = metatag["property"], property == "og:" + key {
+                    return trimmedContent
+                }
+                if let name = metatag["name"], name == ("twitter:" + key) {
+                    return trimmedContent
+                }
+                if let name = metatag["name"], name == key {
+                    return trimmedContent
+                }
+                if let itemprop = metatag["itemprop"], itemprop == key {
+                    return trimmedContent
                 }
             }
         }
-
-        return result
+        return nil
     }
 
     // Crawl for title if needed
-    internal func crawlTitle(_ htmlCode: String, result: Response) -> (htmlCode: String, result: Response) {
+    internal func crawlTitle(_ htmlCode: String, result: Response) -> Response {
         var result = result
         let title = result[.title] as? String
 
@@ -505,7 +492,7 @@ extension SwiftLinkPreview {
                     let fromBody: String = self.crawlCode(htmlCode, minimum: SwiftLinkPreview.titleMinimumRelevant)
                     if !fromBody.isEmpty {
                         result[.title] = fromBody.decoded.extendedTrim
-                        return (htmlCode.replace(fromBody, with: ""), result)
+                        return result
                     }
                 } else {
                     result[.title] = value.decoded.extendedTrim
@@ -513,11 +500,11 @@ extension SwiftLinkPreview {
             }
         }
 
-        return (htmlCode, result)
+        return result
     }
 
     // Crawl for description if needed
-    internal func crawlDescription(_ htmlCode: String, result: Response) -> (htmlCode: String, result: Response) {
+    internal func crawlDescription(_ htmlCode: String, result: Response) -> Response {
         var result = result
         let description = result[.description] as? String
 
@@ -528,7 +515,7 @@ extension SwiftLinkPreview {
             }
         }
 
-        return (htmlCode, result)
+        return result
     }
 
     // Crawl for images
