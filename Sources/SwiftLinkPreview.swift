@@ -353,7 +353,7 @@ extension SwiftLinkPreview {
         var result = response
         //TODO: Consider as error if failed to parse?
         if let doc = try? HTMLDocument(string: htmlCode) {
-            result = self.crawlIcon(htmlCode, result: response)
+            result = self.crawlIcon(doc: doc, response: result)
             
             result = self.crawlMetatags(doc: doc, response: result)
             
@@ -418,21 +418,20 @@ extension SwiftLinkPreview {
 extension SwiftLinkPreview {
 
     // searc for favicn
-    internal func crawlIcon(_ htmlCode: String, result: Response) -> Response {
-        var result = result
-
-        let metatags = Regex.pregMatchAll(htmlCode, regex: Regex.linkPattern, index: 1)
-
+    internal func crawlIcon(doc: HTMLDocument, response: Response) -> Response {
+        var result = response
+        
+        let links : NodeSet = doc.xpath("//link")
+        
         let filters = [
-        { (link: String) -> Bool in link.range(of: "apple-touch") != nil },
-        { (link: String) -> Bool in link.range(of: "shortcut") != nil },
-        { (link: String) -> Bool in link.range(of: "icon") != nil }
+        { (link: XMLElement) -> Bool in link["rel"]?.range(of: "apple-touch") != nil },
+        { (link: XMLElement) -> Bool in link["rel"]?.range(of: "shortcut") != nil },
+        { (link: XMLElement) -> Bool in link["rel"]?.range(of: "icon") != nil }
         ]
 
         for filter in filters {
-            if let first = metatags.filter(filter).first {
-                let matches = Regex.pregMatchAll(first, regex: Regex.hrefPattern, index: 1)
-                if let val = matches.first {
+            if let first = links.filter(filter).first {
+                if let val = first["href"] {
                     result[SwiftLinkResponseKey.icon] = self.addImagePrefixIfNeeded(val.replace("\"", with: ""), result: result)
                     return result
                 }
