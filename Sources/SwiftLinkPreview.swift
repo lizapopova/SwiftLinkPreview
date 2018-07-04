@@ -469,10 +469,10 @@ extension SwiftLinkPreview {
                 if let name = metatag["name"], name == ("twitter:" + key) {
                     return trimmedContent
                 }
-                if let name = metatag["name"], name == key {
+                if let name = metatag["name"], name.lowercased() == key {
                     return trimmedContent
                 }
-                if let itemprop = metatag["itemprop"], itemprop == key {
+                if let itemprop = metatag["itemprop"], itemprop.lowercased() == key {
                     return trimmedContent
                 }
             }
