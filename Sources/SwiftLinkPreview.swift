@@ -353,7 +353,7 @@ extension SwiftLinkPreview {
         var result = response
         //TODO: Consider as error if failed to parse?
         if let doc = try? HTMLDocument(string: htmlCode) {
-            result = self.crawlIcon(doc: doc, response: result)
+            result = self.crawlForIcon(doc, response: result)
             
             result = self.crawlMetatags(doc: doc, response: result)
             
@@ -417,27 +417,18 @@ extension SwiftLinkPreview {
 // Tag functions
 extension SwiftLinkPreview {
 
-    // searc for favicn
-    internal func crawlIcon(doc: HTMLDocument, response: Response) -> Response {
+    // Search for favicn.
+    internal func crawlForIcon(_ doc: HTMLDocument, response: Response) -> Response {
         var result = response
-        
         let links: NodeSet = doc.xpath("//link")
-        
-        let filters = [
-        { (link: XMLElement) -> Bool in link["rel"]?.range(of: "apple-touch") != nil },
-        { (link: XMLElement) -> Bool in link["rel"]?.range(of: "shortcut") != nil },
-        { (link: XMLElement) -> Bool in link["rel"]?.range(of: "icon") != nil }
-        ]
-
-        for filter in filters {
-            if let first = links.filter(filter).first {
-                if let val = first["href"] {
-                    result[SwiftLinkResponseKey.icon] = self.addImagePrefixIfNeeded(val.replace("\"", with: ""), result: result)
-                    return result
+        for link in links {
+            if let href = link["href"], let rel = link["rel"] {
+                if rel.contains("icon") || rel.contains("shortcut") || rel.contains("apple-touch") {
+                    result[.icon] = addImagePrefixIfNeeded(href, response: result)
+                    break
                 }
             }
         }
-
         return result
     }
     
@@ -451,7 +442,7 @@ extension SwiftLinkPreview {
             result[.description] = description
         }
         if let image = crawlMetatags(metatags, for:SwiftLinkResponseKey.image.rawValue) {
-            let value = addImagePrefixIfNeeded(image, result: result)
+            let value = addImagePrefixIfNeeded(image, response: result)
             if value.isImage() {
                 result[.image] = value
             }
@@ -539,24 +530,24 @@ extension SwiftLinkPreview {
             if images == nil || images?.isEmpty ?? true {
                 let values = Regex.pregMatchAll(htmlCode, regex: Regex.imageTagPattern, index: 2)
                 if !values.isEmpty {
-                    let imgs = values.map { self.addImagePrefixIfNeeded($0, result: result) }
+                    let imgs = values.map { self.addImagePrefixIfNeeded($0, response: result) }
 
                     result[.images] = imgs
                     result[.image] = imgs.first
                 }
             }
         } else {
-            result[.images] = [self.addImagePrefixIfNeeded(mainImage ?? String(), result: result)]
+            result[.images] = [self.addImagePrefixIfNeeded(mainImage ?? String(), response: result)]
         }
         return result
     }
 
     // Add prefix image if needed
-    fileprivate func addImagePrefixIfNeeded(_ image: String, result: Response) -> String {
+    fileprivate func addImagePrefixIfNeeded(_ image: String, response: Response) -> String {
 
         var image = image
 
-        if let canonicalUrl = result[.canonicalUrl] as? String, let finalUrl = (result[.finalUrl] as? URL)?.absoluteString {
+        if let canonicalUrl = response[.canonicalUrl] as? String, let finalUrl = (response[.finalUrl] as? URL)?.absoluteString {
             if finalUrl.hasPrefix("https:") {
                 if image.hasPrefix("//") {
                     image = "https:" + image
