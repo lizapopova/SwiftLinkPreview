@@ -421,7 +421,7 @@ extension SwiftLinkPreview {
     internal func crawlIcon(doc: HTMLDocument, response: Response) -> Response {
         var result = response
         
-        let links : NodeSet = doc.xpath("//link")
+        let links: NodeSet = doc.xpath("//link")
         
         let filters = [
         { (link: XMLElement) -> Bool in link["rel"]?.range(of: "apple-touch") != nil },
@@ -443,7 +443,7 @@ extension SwiftLinkPreview {
     
     internal func crawlMetatags(doc: HTMLDocument, response: Response) -> Response {
         var result = response
-        let metatags : NodeSet = doc.xpath("//meta")
+        let metatags: NodeSet = doc.xpath("//meta")
         if let title = crawlMetatags(metatags, for:SwiftLinkResponseKey.title.rawValue) {
             result[.title] = title
         }
@@ -459,7 +459,11 @@ extension SwiftLinkPreview {
         return result
     }
     
-    internal func crawlMetatags(_ metatags: NodeSet, for key : String) -> String? {
+    // Search for the given key in metatags.
+    // Content with og: and twitter: prefixes is prioritized.
+    internal func crawlMetatags(_ metatags: NodeSet, for key: String) -> String? {
+        let key = key.lowercased()
+        var value: String? = nil
         for metatag in metatags {
             if let content = metatag["content"] {
                 let trimmedContent = content.extendedTrim
@@ -470,14 +474,18 @@ extension SwiftLinkPreview {
                     return trimmedContent
                 }
                 if let name = metatag["name"], name.lowercased() == key {
-                    return trimmedContent
+                    if value == nil {
+                        value = trimmedContent
+                    }
                 }
                 if let itemprop = metatag["itemprop"], itemprop.lowercased() == key {
-                    return trimmedContent
+                    if value == nil {
+                        value = trimmedContent
+                    }
                 }
             }
         }
-        return nil
+        return value
     }
 
     // Crawl for title if needed
