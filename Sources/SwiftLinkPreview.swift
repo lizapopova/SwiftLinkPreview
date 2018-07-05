@@ -353,15 +353,12 @@ extension SwiftLinkPreview {
         var result = response
         //TODO: Consider as error if failed to parse?
         if let doc = try? HTMLDocument(string: htmlCode) {
+            let metatags = doc.xpath("//meta")
+            result = self.crawlForTitle(doc, meta: metatags, response: result)
+            result = self.crawlMetatags(doc, meta: metatags, response: result)
             result = self.crawlForIcon(doc, response: result)
-            
-            result = self.crawlMetatags(doc: doc, response: result)
-            
-            result = self.crawlTitle(htmlCode, result: result)
-            
-            result = self.crawlDescription(htmlCode, result: result)
-            
-            result = self.crawlImages(htmlCode, result: result)
+            //result = self.crawlDescription(htmlCode, result: result)
+            //result = self.crawlImages(htmlCode, result: result)
         }
         return result
     }
@@ -417,14 +414,14 @@ extension SwiftLinkPreview {
 // Tag functions
 extension SwiftLinkPreview {
 
-    // Search for favicn.
+    // Searches for icon in links.
     internal func crawlForIcon(_ doc: HTMLDocument, response: Response) -> Response {
         var result = response
-        let links: NodeSet = doc.xpath("//link")
+        let links = doc.xpath("//link")
         for link in links {
             if let href = link["href"], let rel = link["rel"] {
                 if rel.contains("icon") || rel.contains("shortcut") || rel.contains("apple-touch") {
-                    result[.icon] = addImagePrefixIfNeeded(href, response: result)
+                    result[.icon] = self.addImagePrefixIfNeeded(href, response: response)
                     break
                 }
             }
@@ -432,17 +429,14 @@ extension SwiftLinkPreview {
         return result
     }
     
-    internal func crawlMetatags(doc: HTMLDocument, response: Response) -> Response {
+    // Searches for description and image in metatags.
+    internal func crawlMetatags(_ doc: HTMLDocument, meta metatags: NodeSet, response: Response) -> Response {
         var result = response
-        let metatags: NodeSet = doc.xpath("//meta")
-        if let title = crawlMetatags(metatags, for:SwiftLinkResponseKey.title.rawValue) {
-            result[.title] = title
-        }
-        if let description = crawlMetatags(metatags, for:SwiftLinkResponseKey.description.rawValue) {
+        if let description = self.crawlMetatags(metatags, for:SwiftLinkResponseKey.description.rawValue) {
             result[.description] = description
         }
-        if let image = crawlMetatags(metatags, for:SwiftLinkResponseKey.image.rawValue) {
-            let value = addImagePrefixIfNeeded(image, response: result)
+        if let image = self.crawlMetatags(metatags, for:SwiftLinkResponseKey.image.rawValue) {
+            let value = self.addImagePrefixIfNeeded(image, response: response)
             if value.isImage() {
                 result[.image] = value
             }
@@ -450,7 +444,7 @@ extension SwiftLinkPreview {
         return result
     }
     
-    // Search for the given key in metatags.
+    // Searches for the given key in metatags.
     // Content with og: and twitter: prefixes is prioritized.
     internal func crawlMetatags(_ metatags: NodeSet, for key: String) -> String? {
         let key = key.lowercased()
@@ -479,25 +473,22 @@ extension SwiftLinkPreview {
         return value
     }
 
-    // Crawl for title if needed
-    internal func crawlTitle(_ htmlCode: String, result: Response) -> Response {
-        var result = result
-        let title = result[.title] as? String
-
-        if title == nil || title?.isEmpty ?? true {
-            if let value = Regex.pregMatchFirst(htmlCode, regex: Regex.titlePattern, index: 2) {
-                if value.isEmpty {
-                    let fromBody: String = self.crawlCode(htmlCode, minimum: SwiftLinkPreview.titleMinimumRelevant)
-                    if !fromBody.isEmpty {
-                        result[.title] = fromBody.decoded.extendedTrim
-                        return result
-                    }
-                } else {
-                    result[.title] = value.decoded.extendedTrim
-                }
-            }
+    // Consequentially searches for nonempty title in <meta>, <title>, <h1>, <h2> tags.
+    // It nothing found, returns final url host.
+    internal func crawlForTitle(_ doc: HTMLDocument, meta metatags: NodeSet, response: Response) -> Response {
+        var result = response
+        if let titleFromMeta = self.crawlMetatags(metatags, for:"title"), !titleFromMeta.isEmpty {
+            result[.title] = titleFromMeta
+        } else if let titleFromTag = doc.title?.extendedTrim, !titleFromTag.isEmpty {
+            result[.title] = titleFromTag
+        } else if let notEmptyH1 = doc.xpath("//h1").first(where: { !$0.stringValue.extendedTrim.isEmpty }) {
+            result[.title] = notEmptyH1.stringValue.extendedTrim
+        } else if let notEmptyH2 = doc.xpath("//h2").first(where: { !$0.stringValue.extendedTrim.isEmpty }) {
+            result[.title] = notEmptyH2.stringValue.extendedTrim
+        } else {
+            let finalUrl = response[.finalUrl] as? URL?
+            result[.title] = finalUrl??.host ?? ""
         }
-
         return result
     }
 
