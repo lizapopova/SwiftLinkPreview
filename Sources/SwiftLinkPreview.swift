@@ -481,15 +481,20 @@ extension SwiftLinkPreview {
             result[.title] = titleFromMeta
         } else if let titleFromTag = doc.title?.extendedTrim, !titleFromTag.isEmpty {
             result[.title] = titleFromTag
-        } else if let notEmptyH1 = doc.xpath("//h1").first(where: { !$0.stringValue.extendedTrim.isEmpty }) {
+        } else if let notEmptyH1 = firstNotEmpty("h1", in: doc) {
             result[.title] = notEmptyH1.stringValue.extendedTrim
-        } else if let notEmptyH2 = doc.xpath("//h2").first(where: { !$0.stringValue.extendedTrim.isEmpty }) {
+        } else if let notEmptyH2 = firstNotEmpty("h2", in: doc) {
             result[.title] = notEmptyH2.stringValue.extendedTrim
         } else {
             let finalUrl = response[.finalUrl] as? URL?
             result[.title] = finalUrl??.host ?? ""
         }
         return result
+    }
+    
+    // Finds first nonempty tag, that is not a child of <noscript>.
+    func firstNotEmpty(_ tag: String, in doc: HTMLDocument) -> XMLElement? {
+        return doc.xpath("//\(tag)[not(ancestor::noscript)]").first(where: { !$0.stringValue.extendedTrim.isEmpty })
     }
 
     // Crawl for description if needed
