@@ -421,7 +421,7 @@ extension SwiftLinkPreview {
         for link in links {
             if let href = link["href"], let rel = link["rel"] {
                 if rel.contains("icon") || rel.contains("shortcut") || rel.contains("apple-touch") {
-                    result[.icon] = self.addImagePrefixIfNeeded(href, response: response)
+                    result[.icon] = self.absoluteImagePath(href, response: response)
                     break
                 }
             }
@@ -435,10 +435,10 @@ extension SwiftLinkPreview {
         if let description = self.crawlMetatags(metatags, for:SwiftLinkResponseKey.description.rawValue) {
             result[.description] = description
         }
-        if let image = self.crawlMetatags(metatags, for: "image") {
-            let fullPath = self.addImagePrefixIfNeeded(image, response: response)
-            if let imageUrl = URL(string: fullPath), imageUrl.path.hasImageExt() {
-                result[.image] = fullPath
+        if let imagePath = self.crawlMetatags(metatags, for: "image") {
+            let absolutePath = self.absoluteImagePath(imagePath, response: response)
+            if let imageUrl = URL(string: absolutePath), imageUrl.path.hasImageExt() {
+                result[.image] = absolutePath
             }
         }
         return result
@@ -526,32 +526,27 @@ extension SwiftLinkPreview {
             if images == nil || images?.isEmpty ?? true {
                 let values = Regex.pregMatchAll(htmlCode, regex: Regex.imageTagPattern, index: 2)
                 if !values.isEmpty {
-                    let imgs = values.map { self.addImagePrefixIfNeeded($0, response: result) }
+                    let imgs = values.map { self.absoluteImagePath($0, response: result) }
 
                     result[.images] = imgs
                     result[.image] = imgs.first
                 }
             }
         } else {
-            result[.images] = [self.addImagePrefixIfNeeded(mainImage ?? String(), response: result)]
+            result[.images] = [self.absoluteImagePath(mainImage ?? String(), response: result)]
         }
         return result
     }
 
-    // Add prefix image if needed
-    fileprivate func addImagePrefixIfNeeded(_ image: String, response: Response) -> String {
-
-        var image = image
-
-        if let canonicalUrl = response[.canonicalUrl] as? String, let scheme = (response[.finalUrl] as? URL)?.scheme {
-            if image.hasPrefix("//") {
-                image = "\(scheme):" + image
-            } else if image.hasPrefix("/") {
-                image = "\(scheme)://" + canonicalUrl + image
+    // Makes absolute image path from relative if needed.
+    fileprivate func absoluteImagePath(_ imagePath: String, response: Response) -> String {
+        if let imageUrl = URL(string: imagePath), imageUrl.scheme == nil {
+            // Path is relative
+            if let url = response[.finalUrl] as? URL, let absoluteUrl = URL(string: imagePath, relativeTo: url) {
+                return absoluteUrl.absoluteString
             }
         }
-        
-        return image
+        return imagePath
     }
 
     // Crawl the entire code
