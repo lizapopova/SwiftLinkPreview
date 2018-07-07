@@ -355,10 +355,11 @@ extension SwiftLinkPreview {
         if let doc = try? HTMLDocument(string: htmlCode) {
             let metatags = doc.xpath("//meta")
             result = self.crawlForTitle(doc, meta: metatags, response: result)
-            result = self.crawlMetatags(doc, meta: metatags, response: result)
+            result = self.crawlForDescription(doc, meta: metatags, response: result)
+            result = self.crawlForImage(doc, meta: metatags, response: result)
             result = self.crawlForIcon(doc, response: result)
-            //result = self.crawlDescription(htmlCode, result: result)
             //result = self.crawlImages(htmlCode, result: result)
+            
         }
         return result
     }
@@ -429,21 +430,6 @@ extension SwiftLinkPreview {
         return result
     }
     
-    // Searches for description and image in metatags.
-    internal func crawlMetatags(_ doc: HTMLDocument, meta metatags: NodeSet, response: Response) -> Response {
-        var result = response
-        if let description = self.crawlMetatags(metatags, for:SwiftLinkResponseKey.description.rawValue) {
-            result[.description] = description
-        }
-        if let imagePath = self.crawlMetatags(metatags, for: "image") {
-            let absolutePath = self.absoluteImagePath(imagePath, response: response)
-            if let imageUrl = URL(string: absolutePath), imageUrl.path.hasImageExt() {
-                result[.image] = absolutePath
-            }
-        }
-        return result
-    }
-    
     // Searches for the given key in metatags.
     // Content with og: and twitter: prefixes is prioritized.
     internal func crawlMetatags(_ metatags: NodeSet, for key: String) -> String? {
@@ -497,18 +483,24 @@ extension SwiftLinkPreview {
         return doc.xpath("//\(tag)[not(ancestor::noscript)]").first(where: { !$0.stringValue.extendedTrim.isEmpty })
     }
 
-    // Crawl for description if needed
-    internal func crawlDescription(_ htmlCode: String, result: Response) -> Response {
-        var result = result
-        let description = result[.description] as? String
-
-        if description == nil || description?.isEmpty ?? true {
-            let value: String = self.crawlCode(htmlCode, minimum: SwiftLinkPreview.decriptionMinimumRelevant)
-            if !value.isEmpty {
-                result[.description] = value.decoded.extendedTrim
+    internal func crawlForDescription(_ doc: HTMLDocument, meta metatags: NodeSet, response: Response) -> Response {
+        var result = response
+        if let descFromMeta = self.crawlMetatags(metatags, for: "description") {
+            result[.description] = descFromMeta
+        } else if let notEmptyP = firstNotEmpty("p", in: doc) {
+            result[.description] = notEmptyP.stringValue.extendedTrim
+        }
+        return result
+    }
+    
+    internal func crawlForImage(_ doc: HTMLDocument, meta metatags: NodeSet, response: Response) -> Response {
+        var result = response
+        if let imagePath = self.crawlMetatags(metatags, for: "image") {
+            let absolutePath = self.absoluteImagePath(imagePath, response: response)
+            if let imageUrl = URL(string: absolutePath), imageUrl.path.hasImageExt() {
+                result[.image] = absolutePath
             }
         }
-
         return result
     }
 
@@ -547,85 +539,6 @@ extension SwiftLinkPreview {
             }
         }
         return imagePath
-    }
-
-    // Crawl the entire code
-    internal func crawlCode(_ content: String, minimum: Int) -> String {
-
-        let resultFirstSearch = self.getTagContent("p", content: content, minimum: minimum)
-
-        if !resultFirstSearch.isEmpty {
-
-            return resultFirstSearch
-
-        } else {
-
-            let resultSecondSearch = self.getTagContent("div", content: content, minimum: minimum)
-
-            if !resultSecondSearch.isEmpty {
-
-                return resultSecondSearch
-
-            } else {
-
-                let resultThirdSearch = self.getTagContent("span", content: content, minimum: minimum)
-
-                if !resultThirdSearch.isEmpty {
-
-                    return resultThirdSearch
-
-                } else {
-
-                    if resultThirdSearch.count >= resultFirstSearch.count {
-
-                        if resultThirdSearch.count >= resultThirdSearch.count {
-
-                            return resultThirdSearch
-
-                        } else {
-
-                            return resultThirdSearch
-                            
-                        }
-                        
-                    } else {
-                        
-                        return resultFirstSearch
-                        
-                    }
-                    
-                }
-                
-                
-            }
-            
-        }
-        
-    }
-    
-    // Get tag content
-    private func getTagContent(_ tag: String, content: String, minimum: Int) -> String {
-        
-        let pattern = Regex.tagPattern(tag)
-        
-        let index = 2
-        let rawMatches = Regex.pregMatchAll(content, regex: pattern, index: index)
-        
-        let matches = rawMatches.filter({ $0.extendedTrim.tagsStripped.count >= minimum })
-        var result = matches.count > 0 ? matches[0] : ""
-        
-        if result.isEmpty {
-            
-            if let match = Regex.pregMatchFirst(content, regex: pattern, index: 2) {
-                
-                result = match.extendedTrim.tagsStripped
-                
-            }
-            
-        }
-        
-        return result
-        
     }
     
 }
