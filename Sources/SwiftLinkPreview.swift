@@ -305,7 +305,7 @@ extension SwiftLinkPreview {
 
         guard !cancellable.isCancelled, let url = response[.finalUrl] as? URL else { return }
 
-        if url.absoluteString.isImage() {
+        if url.path.hasImageExt() {
             var result = response
 
             result[.title] = ""
@@ -435,10 +435,10 @@ extension SwiftLinkPreview {
         if let description = self.crawlMetatags(metatags, for:SwiftLinkResponseKey.description.rawValue) {
             result[.description] = description
         }
-        if let image = self.crawlMetatags(metatags, for:SwiftLinkResponseKey.image.rawValue) {
-            let value = self.addImagePrefixIfNeeded(image, response: response)
-            if value.isImage() {
-                result[.image] = value
+        if let image = self.crawlMetatags(metatags, for: "image") {
+            let fullPath = self.addImagePrefixIfNeeded(image, response: response)
+            if let imageUrl = URL(string: fullPath), imageUrl.path.hasImageExt() {
+                result[.image] = fullPath
             }
         }
         return result
@@ -543,32 +543,15 @@ extension SwiftLinkPreview {
 
         var image = image
 
-        if let canonicalUrl = response[.canonicalUrl] as? String, let finalUrl = (response[.finalUrl] as? URL)?.absoluteString {
-            if finalUrl.hasPrefix("https:") {
-                if image.hasPrefix("//") {
-                    image = "https:" + image
-                } else if image.hasPrefix("/") {
-                    image = "https://" + canonicalUrl + image
-                }
-            } else if image.hasPrefix("//") {
-                image = "http:" + image
+        if let canonicalUrl = response[.canonicalUrl] as? String, let scheme = (response[.finalUrl] as? URL)?.scheme {
+            if image.hasPrefix("//") {
+                image = "\(scheme):" + image
             } else if image.hasPrefix("/") {
-                image = "http://" + canonicalUrl + image
+                image = "\(scheme)://" + canonicalUrl + image
             }
         }
-
-        return removeSuffixIfNeeded(image)
-
-    }
-
-    private func removeSuffixIfNeeded(_ image: String) -> String {
-
-        var image = image
-
-        if let index = image.index(of: "?") { image = String(image[..<index]) }
-
+        
         return image
-
     }
 
     // Crawl the entire code

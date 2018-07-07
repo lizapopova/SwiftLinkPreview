@@ -10,7 +10,6 @@ import Foundation
 // MARK: - Regular expressions
 class Regex {
     
-    static let imagePattern = "(.+?)\\.(gif|jpg|jpeg|png|bmp)$"
     static let imageTagPattern = "<img(.+?)src=\"([^\"](.+?))\"(.+?)[/]?>"
     static let titlePattern = "<title(.*?)>(.*?)</title>"
     static let metatagPattern = "<meta(.*?)>"
@@ -23,13 +22,6 @@ class Regex {
     static let scriptPattern = "<script(.*?)>"
     static let commentPattern = "<!--(.*?)-->"
     static let hrefPattern = ".*href=\"(.*?)\".*"
-    
-    // Test regular expression
-    static func test(_ string: String, regex: String) -> Bool {
-        
-        return Regex.pregMatchFirst(string, regex: regex) != nil
-        
-    }
     
     // Match first occurrency
     static func pregMatchFirst(_ string: String, regex: String, index: Int = 0) -> String? {

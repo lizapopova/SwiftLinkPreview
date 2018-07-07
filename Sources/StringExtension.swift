@@ -97,11 +97,9 @@ extension String {
         
     }
     
-    // Check if url is an image
-    func isImage() -> Bool {
-        
-        return Regex.test(self, regex: Regex.imagePattern)
-        
+    func hasImageExt() -> Bool {
+        let imageExts = [".gif", ".jpg", ".jpeg", ".png", ".bmp"]
+        return imageExts.contains(where: { self.hasSuffix($0) })
     }
 
     // Split into substring of equal length
