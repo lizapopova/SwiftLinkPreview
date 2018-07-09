@@ -33,8 +33,7 @@ open class SwiftLinkPreview: NSObject {
     public typealias Response = [SwiftLinkResponseKey: Any]
 
     // MARK: - Vars
-    static let titleMinimumRelevant: Int = 15
-    static let decriptionMinimumRelevant: Int = 100
+    static let descMinLength = 30
 
     public var session: URLSession
     public let workQueue: DispatchQueue
@@ -458,6 +457,22 @@ extension SwiftLinkPreview {
         }
         return value
     }
+    
+    // Searches for text in the given tags of HTMLDocument.
+    // Result should be nonempty by default. In general text length is more or equal than the given minLength.
+    // Unwanted content is ignored, such as inside <noscript>, containing <script> and <style>.
+    // Returns nil if nothing was found.
+    func crawlForText(_ doc: HTMLDocument, tags: [String], minLength: Int = 1) -> String? {
+        var xpath = ""
+        for (index, tag) in tags.enumerated() {
+            if (index != 0) {
+                xpath.append(" | ")
+            }
+            xpath.append("//\(tag)[not(ancestor::noscript) and not(descendant::script) and not(descendant::style)]")
+        }
+        let firstMatch = doc.xpath(xpath).first(where: { $0.stringValue.extendedTrim.count >= minLength })
+        return firstMatch?.stringValue.extendedTrim
+    }
 
     // Consequentially searches for nonempty title in <meta>, <title>, <h1>, <h2> tags.
     // It nothing found, returns final url host.
@@ -467,28 +482,31 @@ extension SwiftLinkPreview {
             result[.title] = titleFromMeta
         } else if let titleFromTag = doc.title?.extendedTrim, !titleFromTag.isEmpty {
             result[.title] = titleFromTag
-        } else if let notEmptyH1 = firstNotEmpty("h1", in: doc) {
-            result[.title] = notEmptyH1.stringValue.extendedTrim
-        } else if let notEmptyH2 = firstNotEmpty("h2", in: doc) {
-            result[.title] = notEmptyH2.stringValue.extendedTrim
+        } else if let titleFromH1 = self.crawlForText(doc, tags: ["h1"]) {
+            result[.title] = titleFromH1
+        } else if let titleFromH2 = self.crawlForText(doc, tags: ["h2"]) {
+            result[.title] = titleFromH2
         } else {
             let finalUrl = response[.finalUrl] as? URL?
             result[.title] = finalUrl??.host ?? ""
         }
         return result
     }
-    
-    // Finds first nonempty tag, that is not a child of <noscript>.
-    func firstNotEmpty(_ tag: String, in doc: HTMLDocument) -> XMLElement? {
-        return doc.xpath("//\(tag)[not(ancestor::noscript)]").first(where: { !$0.stringValue.extendedTrim.isEmpty })
-    }
 
+    // Consequentially searches for description in <meta>, <p>, <h3>-<h6>, <div> tags.
+    // If nothing found, returns an empty string.
     internal func crawlForDescription(_ doc: HTMLDocument, meta metatags: NodeSet, response: Response) -> Response {
         var result = response
         if let descFromMeta = self.crawlMetatags(metatags, for: "description") {
             result[.description] = descFromMeta
-        } else if let notEmptyP = firstNotEmpty("p", in: doc) {
-            result[.description] = notEmptyP.stringValue.extendedTrim
+        } else if let descFromP = self.crawlForText(doc, tags: ["p"], minLength: SwiftLinkPreview.descMinLength) {
+            result[.description] = descFromP
+        } else if let descFromH = self.crawlForText(doc, tags: ["h3", "h4", "h5", "h6"], minLength: SwiftLinkPreview.descMinLength) {
+            result[.description] = descFromH
+        } else if let descFromDiv = self.crawlForText(doc, tags: ["div"], minLength: SwiftLinkPreview.descMinLength) {
+            result[.description] = descFromDiv
+        } else {
+            result[.description] = ""
         }
         return result
     }
