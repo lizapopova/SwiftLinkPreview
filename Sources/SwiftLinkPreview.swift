@@ -127,7 +127,6 @@ open class SwiftLinkPreview: NSObject {
                             var result: [SwiftLinkResponseKey: Any] = [:]
                             result[.url] = url
                             result[.finalUrl] = self.extractInURLRedirectionIfNeeded(unshortened)
-                            result[.canonicalUrl] = self.extractCanonicalURL(unshortened)
 
                             self.extractInfo(response: result, cancellable: cancellable, completion: {
 
@@ -311,6 +310,7 @@ extension SwiftLinkPreview {
             result[.description] = ""
             result[.images] = [url.absoluteString]
             result[.image] = url.absoluteString
+            result[.canonicalUrl] = url.host ?? ""
 
             completion(result)
         } else {
@@ -353,84 +353,42 @@ extension SwiftLinkPreview {
         //TODO: Consider as error if failed to parse?
         if let doc = try? HTMLDocument(string: htmlCode) {
             let metatags = doc.xpath("//meta")
+            let links = doc.xpath("//link")
+            result = self.crawlForCanonicalUrl(links: links, response: result)
             result = self.crawlForTitle(doc, meta: metatags, response: result)
             result = self.crawlForDescription(doc, meta: metatags, response: result)
             result = self.crawlForImage(doc, meta: metatags, response: result)
-            result = self.crawlForIcon(doc, response: result)
+            result = self.crawlForIcon(links: links, response: result)
             //result = self.crawlImages(htmlCode, result: result)
             
         }
         return result
     }
-
-
-    // Extract canonical URL
-    internal func extractCanonicalURL(_ finalUrl: URL) -> String {
-
-        let preUrl: String = finalUrl.absoluteString
-        let url = preUrl
-            .replace("http://", with: "")
-            .replace("https://", with: "")
-            .replace("file://", with: "")
-            .replace("ftp://", with: "")
-
-        if preUrl != url {
-
-            if let canonicalUrl = Regex.pregMatchFirst(url, regex: Regex.cannonicalUrlPattern, index: 1) {
-
-                if !canonicalUrl.isEmpty {
-
-                    return self.extractBaseUrl(canonicalUrl)
-
-                } else {
-
-                    return self.extractBaseUrl(url)
-
-                }
-
-            } else {
-
-                return self.extractBaseUrl(url)
-
-            }
-
-        } else {
-
-            return self.extractBaseUrl(preUrl)
-
-        }
-
-    }
-
-    // Extract base URL
-    fileprivate func extractBaseUrl(_ url: String) -> String {
-
-        return String(url.split(separator: "/", maxSplits: 1, omittingEmptySubsequences: true)[0])
-        
-    }
-
 }
 
 // Tag functions
 extension SwiftLinkPreview {
-
-    // Searches for icon in links.
-    internal func crawlForIcon(_ doc: HTMLDocument, response: Response) -> Response {
+    
+    // Searches for canonical url in <link> tags and uses its host.
+    // If nothing found uses final url host.
+    internal func crawlForCanonicalUrl(links: NodeSet, response: Response) -> Response {
         var result = response
-        let links = doc.xpath("//link")
+        var canonicalHost = (response[.finalUrl] as? URL)?.host
         for link in links {
-            if let href = link["href"], let rel = link["rel"] {
-                if rel.contains("icon") || rel.contains("shortcut") || rel.contains("apple-touch") {
-                    result[.icon] = self.absoluteImagePath(href, response: response)
+            if let rel = link["rel"], let href = link["href"] {
+                if rel == "canonical", let hrefHost = URL(string: href)?.host {
+                    canonicalHost = hrefHost
                     break
                 }
             }
         }
+        result[.canonicalUrl] = canonicalHost ?? ""
         return result
     }
     
-    // Searches for the given key in metatags.
+    // Searches for the given key in <meta> tags. Checks are case insensitive.
     // Content with og: and twitter: prefixes is prioritized.
+    // If nothing found returns nil.
     internal func crawlMetatags(_ metatags: NodeSet, for key: String) -> String? {
         let key = key.lowercased()
         var value: String? = nil
@@ -459,9 +417,9 @@ extension SwiftLinkPreview {
     }
     
     // Searches for text in the given tags of HTMLDocument.
-    // Result should be nonempty by default. In general text length is more or equal than the given minLength.
+    // The result is nonempty by default. In general, text length should be more or equal than the given minLength.
     // Unwanted content is ignored, such as inside <noscript>, containing <script> and <style>.
-    // Returns nil if nothing was found.
+    // If nothing found returns nil.
     func crawlForText(_ doc: HTMLDocument, tags: [String], minLength: Int = 1) -> String? {
         var xpath = ""
         for (index, tag) in tags.enumerated() {
@@ -475,7 +433,7 @@ extension SwiftLinkPreview {
     }
 
     // Consequentially searches for nonempty title in <meta>, <title>, <h1>, <h2> tags.
-    // It nothing found, returns final url host.
+    // If nothing found uses canonical url(host).
     internal func crawlForTitle(_ doc: HTMLDocument, meta metatags: NodeSet, response: Response) -> Response {
         var result = response
         if let titleFromMeta = self.crawlMetatags(metatags, for:"title"), !titleFromMeta.isEmpty {
@@ -487,14 +445,13 @@ extension SwiftLinkPreview {
         } else if let titleFromH2 = self.crawlForText(doc, tags: ["h2"]) {
             result[.title] = titleFromH2
         } else {
-            let finalUrl = response[.finalUrl] as? URL?
-            result[.title] = finalUrl??.host ?? ""
+            result[.title] = response[.canonicalUrl] as? String ?? ""
         }
         return result
     }
 
     // Consequentially searches for description in <meta>, <p>, <h3>-<h6>, <div> tags.
-    // If nothing found, returns an empty string.
+    // If nothing found uses an empty string.
     internal func crawlForDescription(_ doc: HTMLDocument, meta metatags: NodeSet, response: Response) -> Response {
         var result = response
         if let descFromMeta = self.crawlMetatags(metatags, for: "description") {
@@ -507,6 +464,20 @@ extension SwiftLinkPreview {
             result[.description] = descFromDiv
         } else {
             result[.description] = ""
+        }
+        return result
+    }
+    
+    // Searches for icon in links.
+    internal func crawlForIcon(links: NodeSet, response: Response) -> Response {
+        var result = response
+        for link in links {
+            if let rel = link["rel"], let href = link["href"] {
+                if rel.contains("icon") || rel.contains("shortcut") || rel.contains("apple-touch") {
+                    result[.icon] = self.absoluteImagePath(href, response: response)
+                    break
+                }
+            }
         }
         return result
     }
@@ -551,7 +522,7 @@ extension SwiftLinkPreview {
     // Makes absolute image path from relative if needed.
     fileprivate func absoluteImagePath(_ imagePath: String, response: Response) -> String {
         if let imageUrl = URL(string: imagePath), imageUrl.scheme == nil {
-            // Path is relative
+            // Path is relative.
             if let url = response[.finalUrl] as? URL, let absoluteUrl = URL(string: imagePath, relativeTo: url) {
                 return absoluteUrl.absoluteString
             }

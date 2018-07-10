@@ -11,34 +11,7 @@ import Foundation
 class Regex {
     
     static let imageTagPattern = "<img(.+?)src=\"([^\"](.+?))\"(.+?)[/]?>"
-    static let cannonicalUrlPattern = "([^\\+&#@%\\?=~_\\|!:,;]+)"
     static let rawTagPattern = "<[^>]+>"
-    
-    // Match first occurrency
-    static func pregMatchFirst(_ string: String, regex: String, index: Int = 0) -> String? {
-        
-        do{
-            
-            let rx = try NSRegularExpression(pattern: regex, options: [.caseInsensitive])
-            
-            if let match = rx.firstMatch(in: string, options: [], range: NSMakeRange(0, string.count)) {
-                
-                var result: [String] = Regex.stringMatches([match], text: string, index: index)
-                return result.count == 0 ? nil : result[0]
-                
-            } else {
-                
-                return nil
-                
-            }
-            
-        } catch {
-            
-            return nil
-            
-        }
-        
-    }
     
     // Match all occurrencies
     static func pregMatchAll(_ string: String, regex: String, index: Int = 0) -> [String] {
@@ -80,13 +53,6 @@ class Regex {
                 return ""
             }
         }
-        
-    }
-    
-    // Return tag pattern
-    static func tagPattern(_ tag: String) -> String {
-        
-        return "<" + tag + "(.*?)>(.*?)</" + tag + ">"
         
     }
     

@@ -58,20 +58,6 @@ extension String {
         
     }
     
-    // Strip tags
-    var tagsStripped: String {
-        
-        return self.deleteTagByPattern(Regex.rawTagPattern)
-        
-    }
-    
-    // Delete tab by pattern
-    func deleteTagByPattern(_ pattern: String) -> String {
-        
-        return self.replacingOccurrences(of: pattern, with: "", options: .regularExpression, range: nil)
-        
-    }
-    
     // Replace
     func replace(_ search: String, with: String) -> String {
         
