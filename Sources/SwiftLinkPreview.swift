@@ -366,7 +366,6 @@ extension SwiftLinkPreview {
     }
 }
 
-// Tag functions
 extension SwiftLinkPreview {
     
     // Searches for canonical url in <link> tags and uses its host.
@@ -386,28 +385,33 @@ extension SwiftLinkPreview {
         return result
     }
     
-    // Searches for the given key in <meta> tags. Checks are case insensitive.
-    // Content with og: and twitter: prefixes is prioritized.
+    // Searches for value of the given key in <meta> tags that satisfies the given predicate.
+    // Checks are case insensitive. Content with og: and twitter: prefixes is prioritized.
     // If nothing found returns nil.
-    internal func crawlMetatags(_ metatags: NodeSet, for key: String) -> String? {
+    internal func crawlMetatags(_ metatags: NodeSet, for key: String,
+                                 predicate: ((String) -> Bool)? = nil) -> String? {
         let key = key.lowercased()
         var value: String? = nil
         for metatag in metatags {
             if let content = metatag["content"] {
                 let trimmedContent = content.extendedTrim
                 if let property = metatag["property"], property == "og:" + key {
-                    return trimmedContent
+                    if predicate?(trimmedContent) ?? true {
+                        return trimmedContent
+                    }
                 }
                 if let name = metatag["name"], name == ("twitter:" + key) {
-                    return trimmedContent
+                    if predicate?(trimmedContent) ?? true {
+                        return trimmedContent
+                    }
                 }
                 if let name = metatag["name"], name.lowercased() == key {
-                    if value == nil {
+                    if value == nil && predicate?(trimmedContent) ?? true {
                         value = trimmedContent
                     }
                 }
                 if let itemprop = metatag["itemprop"], itemprop.lowercased() == key {
-                    if value == nil {
+                    if value == nil && predicate?(trimmedContent) ?? true {
                         value = trimmedContent
                     }
                 }
@@ -474,7 +478,7 @@ extension SwiftLinkPreview {
         for link in links {
             if let rel = link["rel"], let href = link["href"] {
                 if rel.contains("icon") || rel.contains("shortcut") || rel.contains("apple-touch") {
-                    result[.icon] = self.absoluteImagePath(href, response: response)
+                    result[.icon] = self.absolutePath(href, response: response)
                     break
                 }
             }
@@ -482,13 +486,14 @@ extension SwiftLinkPreview {
         return result
     }
     
+    
     internal func crawlForImage(_ doc: HTMLDocument, meta metatags: NodeSet, response: Response) -> Response {
         var result = response
-        if let imagePath = self.crawlMetatags(metatags, for: "image") {
-            let absolutePath = self.absoluteImagePath(imagePath, response: response)
-            if let imageUrl = URL(string: absolutePath), imageUrl.path.hasImageExt() {
-                result[.image] = absolutePath
-            }
+        if let imagePath = self.crawlMetatags(metatags, for: "image", predicate: {(string: String) in
+                let absolutePath = self.absolutePath(string, response: response)
+                return URL(string: absolutePath)?.path.hasImageExt() ?? false
+        }) {
+            result[.image] = self.absolutePath(imagePath, response: response)
         }
         return result
     }
@@ -507,27 +512,27 @@ extension SwiftLinkPreview {
             if images == nil || images?.isEmpty ?? true {
                 let values = Regex.pregMatchAll(htmlCode, regex: Regex.imageTagPattern, index: 2)
                 if !values.isEmpty {
-                    let imgs = values.map { self.absoluteImagePath($0, response: result) }
+                    let imgs = values.map { self.absolutePath($0, response: result) }
 
                     result[.images] = imgs
                     result[.image] = imgs.first
                 }
             }
         } else {
-            result[.images] = [self.absoluteImagePath(mainImage ?? String(), response: result)]
+            result[.images] = [self.absolutePath(mainImage ?? String(), response: result)]
         }
         return result
     }
 
-    // Makes absolute image path from relative if needed.
-    fileprivate func absoluteImagePath(_ imagePath: String, response: Response) -> String {
-        if let imageUrl = URL(string: imagePath), imageUrl.scheme == nil {
+    // Makes absolute path from relative if needed.
+    fileprivate func absolutePath(_ path: String, response: Response) -> String {
+        if let url = URL(string: path), url.scheme == nil {
             // Path is relative.
-            if let url = response[.finalUrl] as? URL, let absoluteUrl = URL(string: imagePath, relativeTo: url) {
+            if let finalUrl = response[.finalUrl] as? URL, let absoluteUrl = URL(string: path, relativeTo: finalUrl) {
                 return absoluteUrl.absoluteString
             }
         }
-        return imagePath
+        return path
     }
     
 }
