@@ -357,10 +357,8 @@ extension SwiftLinkPreview {
             result = self.crawlForCanonicalUrl(links: links, response: result)
             result = self.crawlForTitle(doc, meta: metatags, response: result)
             result = self.crawlForDescription(doc, meta: metatags, response: result)
-            result = self.crawlForImage(doc, meta: metatags, response: result)
+            result = self.crawlForImages(doc, meta: metatags, response: result)
             result = self.crawlForIcon(links: links, response: result)
-            //result = self.crawlImages(htmlCode, result: result)
-            
         }
         return result
     }
@@ -487,14 +485,30 @@ extension SwiftLinkPreview {
     }
     
     
-    internal func crawlForImage(_ doc: HTMLDocument, meta metatags: NodeSet, response: Response) -> Response {
-        var result = response
-        if let imagePath = self.crawlMetatags(metatags, for: "image", predicate: {(string: String) in
-                let absolutePath = self.absolutePath(string, response: response)
-                return URL(string: absolutePath)?.path.hasImageExt() ?? false
-        }) {
-            result[.image] = self.absolutePath(imagePath, response: response)
+    internal func crawlForImages(_ doc: HTMLDocument, meta metatags: NodeSet, response: Response) -> Response {
+        func isImagePath(string: String) -> Bool {
+            let absolutePath = self.absolutePath(string, response: response)
+            guard let url = URL(string: absolutePath) else {
+                return false
+            }
+            return url.path.hasImageExt() || url.path.hasNoExt()
         }
+        
+        var result = response
+        var imagePaths: [String] = []
+        if let imagePathFromMeta = self.crawlMetatags(metatags, for: "image", predicate: isImagePath) {
+            let absolutePath = self.absolutePath(imagePathFromMeta, response: response)
+            imagePaths.append(absolutePath)
+        }
+        let images = doc.xpath("//img[not(ancestor::noscript)]")
+        for image in images {
+            if let src = image["src"], isImagePath(string: src) {
+                let absolutePath = self.absolutePath(src, response: response)
+                imagePaths.append(absolutePath)
+            }
+        }
+        result[.images] = imagePaths
+        result[.image] = imagePaths.first ?? ""
         return result
     }
 

@@ -85,7 +85,11 @@ extension String {
     
     func hasImageExt() -> Bool {
         let imageExts = [".gif", ".jpg", ".jpeg", ".png", ".bmp"]
-        return imageExts.contains(where: { self.hasSuffix($0) })
+        return imageExts.contains(where: { self.lowercased().hasSuffix($0) })
+    }
+    
+    func hasNoExt() -> Bool {
+        return self.range(of: ".") == nil
     }
 
     // Split into substring of equal length
