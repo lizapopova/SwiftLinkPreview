@@ -499,7 +499,7 @@ extension SwiftLinkPreview {
             let absolutePath = self.absolutePath(imagePathFromMeta, response: response)
             imagePaths.append(absolutePath)
         }
-        let images = doc.xpath("//img[not(ancestor::noscript)]")
+        let images = doc.xpath("//img[not(ancestor::noscript) and not(parent::a and count(../*) = 1)]")
         for image in images {
             if let src = image["src"], isImagePath(string: src) {
                 let absolutePath = self.absolutePath(src, response: response)
