@@ -484,7 +484,6 @@ extension SwiftLinkPreview {
         return result
     }
     
-    
     internal func crawlForImages(_ doc: HTMLDocument, meta metatags: NodeSet, response: Response) -> Response {
         func isImagePath(string: String) -> Bool {
             let absolutePath = self.absolutePath(string, response: response)
@@ -512,32 +511,6 @@ extension SwiftLinkPreview {
         return result
     }
 
-    // Crawl for images
-    internal func crawlImages(_ htmlCode: String, result: Response) -> Response {
-
-        var result = result
-
-        let mainImage = result[.image] as? String
-
-        if mainImage == nil || mainImage?.isEmpty == true {
-
-            let images = result[.images] as? [String]
-
-            if images == nil || images?.isEmpty ?? true {
-                let values = Regex.pregMatchAll(htmlCode, regex: Regex.imageTagPattern, index: 2)
-                if !values.isEmpty {
-                    let imgs = values.map { self.absolutePath($0, response: result) }
-
-                    result[.images] = imgs
-                    result[.image] = imgs.first
-                }
-            }
-        } else {
-            result[.images] = [self.absolutePath(mainImage ?? String(), response: result)]
-        }
-        return result
-    }
-
     // Makes absolute path from relative if needed.
     fileprivate func absolutePath(_ path: String, response: Response) -> String {
         if let url = URL(string: path), url.scheme == nil {
@@ -548,7 +521,6 @@ extension SwiftLinkPreview {
         }
         return path
     }
-    
 }
 
 extension SwiftLinkPreview: URLSessionDataDelegate {
@@ -562,5 +534,4 @@ extension SwiftLinkPreview: URLSessionDataDelegate {
         request.httpMethod = "GET"
         completionHandler(request)
     }
-
 }

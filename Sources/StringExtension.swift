@@ -21,66 +21,13 @@ extension String {
     
     // Trim
     var trim: String {
-        
         return self.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-        
     }
     
     // Remove extra white spaces
     var extendedTrim: String {
-        
         let components = self.components(separatedBy: CharacterSet.whitespacesAndNewlines)
         return components.filter { !$0.isEmpty }.joined(separator: " ").trim
-        
-    }
-    
-    // Decode HTML entities
-    var decoded: String {
-        
-        let encodedData = self.data(using: String.Encoding.utf8)!
-        let attributedOptions: [NSAttributedString.DocumentReadingOptionKey: Any] =
-            [
-            .documentType: NSAttributedString.DocumentType.html,
-            .characterEncoding: NSNumber(value: String.Encoding.utf8.rawValue)
-        ]
-        
-        do {
-            
-            let attributedString = try NSAttributedString(data: encodedData, options: attributedOptions, documentAttributes: nil)
-            
-            return attributedString.string
-            
-        } catch _ {
-            
-            return self
-            
-        }
-        
-    }
-    
-    // Replace
-    func replace(_ search: String, with: String) -> String {
-        
-        let replaced: String = self.replacingOccurrences(of: search, with: with)
-        
-        return replaced.isEmpty ? self : replaced
-        
-    }
-    
-    // Substring
-    func substring(_ start: Int, end: Int) -> String {
-
-        return self.substring(NSRange(location: start, length: end - start))
-
-    }
-
-    func substring(_ range: NSRange) -> String {
-        
-        var end = range.location + range.length
-        end = end > self.count ? self.count - 1 : end
-        
-        return self.substring(range.location, end: end)
-        
     }
     
     func hasImageExt() -> Bool {
@@ -91,19 +38,4 @@ extension String {
     func hasNoExt() -> Bool {
         return self.range(of: ".") == nil
     }
-
-    // Split into substring of equal length
-    func split(by length: Int) -> [String] {
-        var startIndex = self.startIndex
-        var results = [Substring]()
-
-        while startIndex < self.endIndex {
-            let endIndex = self.index(startIndex, offsetBy: length, limitedBy: self.endIndex) ?? self.endIndex
-            results.append(self[startIndex..<endIndex])
-            startIndex = endIndex
-        }
-
-        return results.map { String($0) }
-    }
-    
 }
