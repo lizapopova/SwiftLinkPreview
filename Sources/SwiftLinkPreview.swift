@@ -484,6 +484,10 @@ extension SwiftLinkPreview {
         return result
     }
     
+    // Searches for images.
+    // Main image is retrieved from <meta> tags if possible. Otherwise, it is set to the first <img> source.
+    // Images result contains the main image (first item) and all appropriate <img> tag sources on the page.
+    // Icons are too small and avoided by ignoring <img> tags that are the only child of <a> tag.
     internal func crawlForImages(_ doc: HTMLDocument, meta metatags: NodeSet, response: Response) -> Response {
         func isImagePath(string: String) -> Bool {
             let absolutePath = self.absolutePath(string, response: response)

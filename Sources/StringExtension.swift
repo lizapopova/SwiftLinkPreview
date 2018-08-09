@@ -18,13 +18,11 @@ import Foundation
 #endif
 
 extension String {
-    
-    // Trim
+
     var trim: String {
         return self.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
     }
-    
-    // Remove extra white spaces
+
     var extendedTrim: String {
         let components = self.components(separatedBy: CharacterSet.whitespacesAndNewlines)
         return components.filter { !$0.isEmpty }.joined(separator: " ").trim
